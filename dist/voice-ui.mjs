@@ -1,5 +1,5 @@
-import {parseVoiceCommand,createVoiceUpdate} from './voice.mjs?v=12';
-import {joinSpeechDraft,readSpeechResults} from './speech-session.mjs?v=12';
+import {parseVoiceCommand,createVoiceUpdate} from './voice.mjs?v=13';
+import {joinSpeechDraft,readSpeechResults} from './speech-session.mjs?v=13';
 const $=id=>document.getElementById(id);
 const SpeechAPI=window.SpeechRecognition||window.webkitSpeechRecognition;
 const errors={'not-allowed':'未获得麦克风权限，请允许后重试，或直接填写下方内容。','service-not-allowed':'当前浏览器未开放识别服务，请换用浏览器或直接填写。','audio-capture':'没有可用麦克风，请检查设备。','network':'识别服务连接失败，请重试或直接填写。','no-speech':'没有听到声音，可以继续补充或直接填写。','language-not-supported':'识别服务不支持普通话，请换用其他浏览器。','aborted':'本次识别已取消。'};
@@ -13,13 +13,12 @@ export function setupVoice({getCard,today,onRecognized,onPending,onError}){
   $('voice-heard').textContent=`${source==='text-demo'?'演示文字':'听到的话'}：${text}`;
   try{
    const card=getCard(cardId),command=parseVoiceCommand(card,text,today());createVoiceUpdate(card,command,today());onRecognized(command,source);
-   if(command.amounts?.length>1||command.hasTotal){const yuan=n=>(n/100).toFixed(2),parts=command.amounts.map(yuan).join(' + ');$('voice-summary').textContent=command.hasTotal?(command.remainder?`总消费 ${yuan(command.amount)} 元；已说明明细 ${parts} 元，另有 ${yuan(command.remainder)} 元未细分。只按总额扣减。`:`总消费 ${yuan(command.amount)} 元；明细 ${parts} = ${yuan(command.amount)} 元，核对一致，只扣一次。`):`${parts} = ${yuan(command.amount)} 元，合并为本次一条消费记录。`;$('voice-summary').hidden=false;}
    $('voice-status').textContent='已填写。可继续补充描述，也可直接修改下方内容，确认后才保存。';$('voice-demo').open=false;
   }catch(err){onError();$('voice-error').textContent=err.message;$('voice-status').textContent='已有字段保留；可继续补充、重新说，或直接修改下方内容。';}
  }
  function reset(id){
   discardDraft();cardId=id;const c=getCard(id);$('voice-error').textContent='';$('voice-demo').open=false;$('voice-demo-input').value='';
-  const examples=c.type==='cash'?['吃饭花了20，饮料4，和朋友一起','刚才消费三十五块五','现在还剩两百块']:c.type==='count'?['今天骑车通勤，沿河风景很好','今天只打卡']:['今天练了一个小时，练了腿','昨天健身打卡'];
+  const examples=['今天骑车通勤，沿河风景很好','昨天健身打卡，练了腿','今天吃饭，和朋友一起'];
   $('voice-examples').textContent='可以说：'+examples.map(s=>`“${s}”`).join('、');$('voice-demo-examples').replaceChildren();
   for(const text of examples){const b=document.createElement('button');b.type='button';b.className='text-button';b.textContent=text;b.addEventListener('click',()=>{$('voice-demo-input').value=text;fill(text,'text-demo');});$('voice-demo-examples').append(b);}
   $('voice-status').textContent=SpeechAPI?'可以连续说，结束时点“说完了”；自动结束后可点“继续补充”。':'当前浏览器没有语音识别接口，可以直接填写下方内容。';
@@ -30,7 +29,7 @@ export function setupVoice({getCard,today,onRecognized,onPending,onError}){
   onPending();$('voice-error').textContent='';$('voice-summary').hidden=true;
   try{
    recognition=new SpeechAPI();recognition.lang='zh-CN';recognition.continuous=true;recognition.interimResults=true;recognition.maxAlternatives=1;
-   recognition.onstart=()=>{if(current!==token)return;$('voice-status').textContent='正在听，可以继续说金额和描述；说完后点击“说完了”。';$('voice-start').disabled=true;$('voice-restart').disabled=true;$('voice-stop').hidden=false;timer=setTimeout(()=>{try{recognition?.stop();}catch{}},60000);};
+   recognition.onstart=()=>{if(current!==token)return;$('voice-status').textContent='正在听，可以连续描述本次使用；说完后点击“说完了”。';$('voice-start').disabled=true;$('voice-restart').disabled=true;$('voice-stop').hidden=false;timer=setTimeout(()=>{try{recognition?.stop();}catch{}},60000);};
    recognition.onresult=e=>{
     if(current!==token)return;({finalText,interimText}=readSpeechResults(e.results));$('voice-heard').hidden=false;
     $('voice-heard').textContent='正在识别：'+joinSpeechDraft(base,joinSpeechDraft(finalText,interimText));

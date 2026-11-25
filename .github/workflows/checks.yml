@@ -10,4 +10,4 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - run: node --test tests/domain.test.mjs tests/expiry.test.mjs tests/voice.test.mjs tests/speech-session.test.mjs tests/voice-ui.test.mjs
+      - run: node --test tests/*.test.mjs

@@ -1,7 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {expiryInfo,sortByExpiry,overviewFor,expiryStage} from '../dist/expiry.mjs';
-import {editedQuantity} from '../dist/domain.mjs';
 test('截止日期按今天计算，到期当天与已过期分别展示',()=>{
  assert.equal(expiryInfo({end:'2026-11-12'},'2026-11-09').label,'还有 3 天到期');
  assert.equal(expiryInfo({end:'2026-11-12'},'2026-11-12').label,'今天到期');
@@ -18,11 +17,6 @@ test('生活感概览取真实最近到期项，排除已过期和归档',()=>{
  const result=overviewFor(cards,'2026-11-09');assert.equal(result.featured.id,'soon');assert.equal(result.currentCount,3);assert.equal(result.expiringCount,1);
  assert.deepEqual(overviewFor([], '2026-11-09'),{currentCount:0,expiringCount:0,featured:null});
  assert.equal(overviewFor([{id:'long',end:'',noExpiry:true}], '2026-11-09').featured.id,'long');
-});
-test('编辑截止日期不改写已隐藏的旧余次，新次卡无需输入余次',()=>{
- for(const quantity of [null,0,8]){const old={quantity};assert.equal(editedQuantity(old,'count','999'),quantity);assert.equal(old.quantity,quantity);}
- assert.equal(editedQuantity(null,'count','8'),null);
- assert.equal(editedQuantity({quantity:10000},'cash','35.50'),3550);
 });
 test('空日期不视为长期有效，按最近到期排序且不改原数据',()=>{
  assert.equal(expiryInfo({end:''},'2026-11-09').date,'待补充');

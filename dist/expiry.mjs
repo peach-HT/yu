@@ -1,4 +1,4 @@
-import {validDate} from './domain.mjs?v=12';
+import {validDate} from './domain.mjs?v=13';
 export function expiryInfo(card,today){
  if(!today||!validDate(today))throw Error('日期无效');
  if(card.noExpiry)return {days:null,expired:false,date:'长期有效',label:'长期有效',tone:''};

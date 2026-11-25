@@ -1,32 +1,68 @@
-export const TYPES=["term","count","cash"];
-// Counts are retained for compatibility, but the expiry-first editor never rewrites them.
-export function editedQuantity(card,type,input){return type==='count'?(card?.quantity??null):parseQuantity(input,type);}
-export function validDate(s){if(s==="")return true;if(!/^\d{4}-\d{2}-\d{2}$/.test(s))return false;const d=new Date(s+"T00:00:00Z");return !Number.isNaN(d.getTime())&&d.toISOString().slice(0,10)===s;}
-export function parseQuantity(text,type){if(type==="term"||text.trim()==="")return null;if(type==="count"){if(!/^\d+$/.test(text)||Number(text)>9999)throw Error("次数需为 0 到 9999 的整数。");return Number(text);}if(!/^\d+(\.\d{1,2})?$/.test(text))throw Error("金额需为非负数字，最多两位小数。");const [whole,dec=""]=text.split(".");const cents=Number(whole)*100+Number(dec.padEnd(2,"0"));if(!Number.isSafeInteger(cents)||cents>9999999999)throw Error("金额过大，请核对。");return cents;}
-export function validateCard(c){return c&&typeof c.id==="string"&&c.id.length>0&&typeof c.name==="string"&&c.name.trim().length>0&&c.name.length<=40&&typeof c.provider==="string"&&c.provider.length<=40&&TYPES.includes(c.type)&&(c.quantity===null||(Number.isSafeInteger(c.quantity)&&c.quantity>=0&&c.quantity<=(c.type==="count"?9999:9999999999)))&&(c.type!=="term"||c.quantity===null)&&[c.start,c.end,c.verified].every(s=>typeof s==="string"&&validDate(s))&&(!c.start||!c.end||c.start<=c.end)&&typeof c.noExpiry==="boolean"&&(!c.noExpiry||c.end==="")&&typeof c.notes==="string"&&c.notes.length<=300&&typeof c.archived==="boolean"&&Number.isInteger(c.revision)&&c.revision>=0;}
-export function createCheckin(card,input,today){
- if(card.archived)throw Error("请先恢复这项权益，再记录使用。");
- if(!input.date||!validDate(input.date)||input.date>today)throw Error("请选择今天或过去的实际使用日期。");
- if((card.start&&input.date<card.start)||(card.end&&input.date>card.end))throw Error("使用日期超出已记录的有效期，请先核对日期或卡片有效期。");
- if(typeof input.note!=="string"||input.note.length>160)throw Error("使用备注最多 160 字。");
- let debit=0;
- if(input.debit&&card.type!=="term"){
-  if(card.quantity===null)throw Error("扣减前请先填写并核对剩余权益，也可以选择只打卡。");
-  debit=card.type==="count"?(input.units??1):parseQuantity(input.amount||"", "cash");
-  if(card.type==='count'&&(!Number.isInteger(debit)||debit<1||debit>9999))throw Error('使用次数需为正整数。');
-  if(debit===null||debit<=0)throw Error("请填写大于零的实际消费金额。");
-  if(debit>card.quantity)throw Error("本次扣减超过已记录的剩余权益，请先核对或校正。");
- }
- const next={...card,quantity:debit?card.quantity-debit:card.quantity,revision:card.revision+1};
- return {card:next,event:{date:input.date,note:input.note,debit,previousQuantity:card.quantity,afterQuantity:next.quantity,revisionAfter:next.revision,undone:false}};
+export const TYPES = ['term', 'count', 'cash'];
+export function validDate(value) {
+  if (value === '') return true;
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const date = new Date(value + 'T00:00:00Z');
+  return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
 }
-export function undoCheckin(card,event){if(event.undone||card.revision!==event.revisionAfter)throw Error("后续记录或余量已改变，无法直接撤销这条。可在编辑中核对并校正余量。");return {...card,quantity:event.previousQuantity,verified:event.previousVerified??card.verified,revision:card.revision+1};}
-
-export function quickChoice(card,events,today){
- const already=events.some(e=>e.cardId===card.id&&e.date===today&&!e.undone&&e.kind!=='adjust');
- const outside=(card.start&&today<card.start)||(card.end&&today>card.end);
- const debit=card.type==='count'&&card.quantity!==null&&card.quantity>0;
- return {already,disabled:!!(already||outside||card.archived),debit,label:already?'今日已打卡 ✓':outside?'不在记录有效期内':debit?'今日打卡 · 扣 1 次':card.type==='count'?'今日打卡 · 不扣次':'今日一键打卡'};
+export function validateCard(card) {
+  return !!card && typeof card.id === 'string' && card.id.length > 0 &&
+    typeof card.name === 'string' && card.name.trim().length > 0 && card.name.length <= 40 &&
+    typeof card.provider === 'string' && card.provider.length <= 40 && TYPES.includes(card.type) &&
+    [card.start, card.end].every(value => typeof value === 'string' && validDate(value)) &&
+    (!card.start || !card.end || card.start <= card.end) &&
+    typeof card.noExpiry === 'boolean' && (!card.noExpiry || card.end === '') &&
+    typeof card.notes === 'string' && card.notes.length <= 300 && typeof card.archived === 'boolean' &&
+    Number.isSafeInteger(card.revision) && card.revision >= 0 &&
+    // Legacy fields remain read-only; new cards do not need them.
+    (!('quantity' in card) || card.quantity === null || (Number.isSafeInteger(card.quantity) && card.quantity >= 0 && card.quantity <= (card.type === 'count' ? 9999 : 9999999999))) &&
+    (!('verified' in card) || (typeof card.verified === 'string' && validDate(card.verified)));
 }
-export function shiftMonth(month,delta){const [y,m]=month.split('-').map(Number);const d=new Date(Date.UTC(y,m-1+delta,1));return `${d.getUTCFullYear()}-${String(d.getUTCMonth()+1).padStart(2,'0')}`;}
-export function monthCells(month){const [y,m]=month.split('-').map(Number);const offset=(new Date(Date.UTC(y,m-1,1)).getUTCDay()+6)%7;const length=new Date(Date.UTC(y,m,0)).getUTCDate();return [...Array(offset).fill(null),...Array.from({length},(_,i)=>`${month}-${String(i+1).padStart(2,'0')}`)];}
+export function isLegacyAccounting(event) {
+  return event.kind === 'adjust' || (event.debit ?? 0) !== 0;
+}
+export function validateEvent(event, cards) {
+  const card = cards.find(item => item.id === event?.cardId);
+  if (!card || typeof event.id !== 'string' || !event.id || !event.date || !validDate(event.date) ||
+      typeof event.note !== 'string' || event.note.length > 160 || typeof event.undone !== 'boolean' ||
+      !Number.isSafeInteger(event.revisionAfter) || event.revisionAfter < 1 ||
+      (event.kind !== undefined && !['use', 'adjust'].includes(event.kind))) return false;
+  const legacy = ['debit', 'previousQuantity', 'afterQuantity'].some(key => key in event);
+  if (!legacy) return event.kind === 'use';
+  if (!Number.isSafeInteger(event.debit) || ![event.previousQuantity, event.afterQuantity].every(value => value === null || (Number.isSafeInteger(value) && value >= 0))) return false;
+  if (event.kind === 'adjust') return card.type !== 'term' && event.afterQuantity !== null &&
+    event.afterQuantity <= (card.type === 'count' ? 9999 : 9999999999) &&
+    (event.previousQuantity === null ? event.debit === 0 : event.previousQuantity - event.debit === event.afterQuantity) &&
+    typeof event.previousVerified === 'string' && validDate(event.previousVerified);
+  return event.debit >= 0 && (event.previousQuantity === null ? event.debit === 0 && event.afterQuantity === null : event.previousQuantity - event.debit === event.afterQuantity);
+}
+export function validateState(state) {
+  return !!state && Array.isArray(state.cards) && Array.isArray(state.events) && typeof state.demo === 'boolean' &&
+    state.cards.every(validateCard) && new Set(state.cards.map(card => card.id)).size === state.cards.length &&
+    state.events.every(event => validateEvent(event, state.cards)) && new Set(state.events.map(event => event.id)).size === state.events.length;
+}
+export function createCheckin(card, input, today) {
+  if (!validateCard(card)) throw Error('权益信息无效，请先核对。');
+  if (card.archived) throw Error('请先恢复这项权益，再记录使用。');
+  if (!today || !validDate(today) || !input.date || !validDate(input.date) || input.date > today) throw Error('请选择今天或过去的实际使用日期。');
+  if ((card.start && input.date < card.start) || (card.end && input.date > card.end)) throw Error('使用日期超出已记录的有效期，请先核对日期。');
+  if (typeof input.note !== 'string' || input.note.length > 160) throw Error('使用备注最多160字。');
+  if (input.debit || input.amount !== undefined || input.units !== undefined) throw Error('当前版本只记录使用，不维护金额或次数。');
+  const next = { ...card, revision: card.revision + 1 };
+  return { card: next, event: { kind: 'use', date: input.date, note: input.note, revisionAfter: next.revision, undone: false } };
+}
+export function undoCheckin(card, event) {
+  if (isLegacyAccounting(event)) throw Error('旧版扣减和校正记录仅供回顾，当前版本不再修改余量。');
+  if (event.undone || card.revision !== event.revisionAfter) throw Error('后续记录或权益已改变，无法直接撤销这条记录。');
+  return { ...card, revision: card.revision + 1 };
+}
+export function shiftMonth(month, delta) {
+  const [year, value] = month.split('-').map(Number), date = new Date(Date.UTC(year, value - 1 + delta, 1));
+  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}`;
+}
+export function monthCells(month) {
+  const [year, value] = month.split('-').map(Number);
+  const offset = (new Date(Date.UTC(year, value - 1, 1)).getUTCDay() + 6) % 7;
+  const length = new Date(Date.UTC(year, value, 0)).getUTCDate();
+  return [...Array(offset).fill(null), ...Array.from({ length }, (_, i) => `${month}-${String(i + 1).padStart(2, '0')}`)];
+}
